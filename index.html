@@ -1,0 +1,155 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CurrentTime Headlines Report</title>
+    <style>
+        body {
+            font-family: 'Open Sans', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .headline {
+            margin: 15px 0;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .headline h3 {
+            margin: 0 0 8px;
+            font-size: 1.3em;
+            color: #34495e;
+        }
+        .headline p {
+            margin: 5px 0;
+            font-size: 1em;
+            line-height: 1.5;
+        }
+        .headline a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .headline a:hover {
+            text-decoration: underline;
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .loading {
+            text-align: center;
+            font-style: italic;
+            color: #888;
+            margin: 20px 0;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1>CurrentTime Headlines Report</h1>
+        <div id="loading" class="loading">Fetching headlines...</div>
+        <div id="headlines"></div>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        const HEADLINES_ENDPOINT = 'YOUR_CLOUD_FUNCTION_HEADLINES_URL'; // Replace with your Cloud Function URL
+
+        async function fetchHeadlines() {
+            const headlinesDiv = document.getElementById('headlines');
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+
+            try {
+                const response = await fetch(HEADLINES_ENDPOINT);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+
+                loadingDiv.style.display = 'none';
+                headlinesDiv.innerHTML = '';
+
+                if (!data.headlines || data.headlines.length === 0) {
+                    errorDiv.textContent = 'No headlines found.';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+
+                data.headlines.forEach(headline => {
+                    const div = document.createElement('div');
+                    div.className = 'headline';
+                    div.innerHTML = `
+                        <h3>${headline.englishTitle}</h3>
+                        <p><strong>Original (Russian):</strong> ${headline.russianTitle}</p>
+                        <p><strong>URL:</strong> <a href="${headline.url}" target="_blank">${headline.url}</a></p>
+                    `;
+                    headlinesDiv.appendChild(div);
+                });
+            } catch (err) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = 'Failed to load headlines: ' + err.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchHeadlines);
+    </script>
+</body>
+</html>
